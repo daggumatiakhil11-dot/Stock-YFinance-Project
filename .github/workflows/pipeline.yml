@@ -1,0 +1,35 @@
+name: Auto Data Pipeline (Month-End)
+
+on:
+  schedule:
+    - cron: '0 12 28-31 * *'   # Runs on 28–31 every month
+  workflow_dispatch:
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        pip install pandas yfinance openpyxl
+
+    - name: Run data pipeline
+      run: |
+        python script/download_data.py
+
+    - name: Commit updated data
+      run: |
+        git config user.name "github-actions"
+        git config user.email "actions@github.com"
+        git add output/
+        git commit -m "Auto update data (month-end)" || echo "No changes"
+        git push
