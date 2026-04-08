@@ -1,211 +1,290 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import os
-
-st.set_page_config(page_title="Stock Dashboard", layout="wide")
-
-st.title("📊 Stock Analytics Dashboard")
-
-# Load data
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-file_path = os.path.join(BASE_DIR, "output", "monthly_ohlcv_data.xlsx")
-
-df = pd.read_excel(file_path)
-
-# Sidebar
-st.sidebar.header("Filters")
-
-ticker = st.sidebar.selectbox("Select Ticker", df["Ticker"].unique())
-
-date_range = st.sidebar.date_input(
-    "Select Date Range",
-    [df["Date"].min(), df["Date"].max()]
-)
-
-# Filter data
-df["Date"] = pd.to_datetime(df["Date"])
-
-filtered_df = df[
-    (df["Ticker"] == ticker) &
-    (df["Date"] >= pd.to_datetime(date_range[0])) &
-    (df["Date"] <= pd.to_datetime(date_range[1]))
-]
-
-# Layout
-col1, col2 = st.columns(2)
-
-# Price Chart
-with col1:
-    st.subheader("Price Trend")
-    fig = px.line(filtered_df, x="Date", y="Close", title=f"{ticker} Price")
-    st.plotly_chart(fig, width='stretch')
-
-# Returns Chart
-with col2:
-    st.subheader("Monthly Returns")
-    fig2 = px.bar(filtered_df, x="Date", y="Monthly_Return", title=f"{ticker} Returns")
-    st.plotly_chart(fig2, width='stretch')
-
-# Moving Averages
-st.subheader("Moving Averages")
-
-fig3 = px.line(
-    filtered_df,
-    x="Date",
-    y=["Close", "MA_3", "MA_6", "MA_12"],
-    title=f"{ticker} Moving Averages"
-)
-
-st.plotly_chart(fig3, width='stretch')
-
-# Metrics
-st.subheader("Key Metrics")
-
-latest = filtered_df.iloc[-1]
-
-col3, col4, col5 = st.columns(3)
-
-col3.metric("Last Close", f"{latest['Close']:.2f}")
-col4.metric("Volatility (%)", f"{latest['Volatility']:.2f}")
-col5.metric("CAGR (%)", f"{latest['CAGR']:.2f}")
-
-# ===============================
-# 🤖 LINEAR REGRESSION
-# ===============================
-from sklearn.linear_model import LinearRegression
 import numpy as np
-
-st.subheader("🤖 AI Price Prediction (Linear Regression)")
-
-model_df = filtered_df.copy().dropna(subset=["Close"])
-model_df["Date_Ordinal"] = model_df["Date"].map(pd.Timestamp.toordinal)
-
-X_lr = model_df[["Date_Ordinal"]]
-y_lr = model_df["Close"]
-
-lr_model = LinearRegression()
-lr_model.fit(X_lr, y_lr)
-
-# Future prediction
-last_date = model_df["Date"].max()
-future_dates = pd.date_range(last_date, periods=6, freq="ME")
-
-future_ordinal = pd.DataFrame(
-    [d.toordinal() for d in future_dates],
-    columns=["Date_Ordinal"]
-)
-
-predictions = lr_model.predict(future_ordinal)
-
-future_df = pd.DataFrame({
-    "Date": future_dates,
-    "Predicted_Close": predictions
-})
-
+import yfinance as yf
 import plotly.graph_objects as go
-
-fig_pred = go.Figure()
-
-fig_pred.add_trace(go.Scatter(
-    x=model_df["Date"],
-    y=model_df["Close"],
-    mode='lines',
-    name='Actual'
-))
-
-fig_pred.add_trace(go.Scatter(
-    x=future_df["Date"],
-    y=future_df["Predicted_Close"],
-    mode='lines+markers',
-    name='LR Predicted'
-))
-
-st.plotly_chart(fig_pred, width='stretch')
-
-# ===============================
-# 🧠 LSTM MODEL
-# ===============================
 from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
-from sklearn.metrics import mean_squared_error
+from streamlit_autorefresh import st_autorefresh
 
-st.subheader("🧠 LSTM Deep Learning Prediction")
+st.set_page_config(page_title="💻 AI Trading Terminal", layout="wide")
 
-lstm_df = filtered_df.copy().dropna(subset=["Close"])
-data = lstm_df["Close"].values.reshape(-1, 1)
+# =========================
+# 🔄 AUTO REFRESH
+# =========================
+refresh_rate = st.sidebar.slider("🔄 Refresh Rate (sec)", 1, 60, 5)
+st_autorefresh(interval=refresh_rate * 1000, key="live_data")
 
-# Normalize
-scaler = MinMaxScaler()
-scaled_data = scaler.fit_transform(data)
+# =========================
+# 🎨 LIGHT UI
+# =========================
+st.markdown("""
+<style>
+[data-testid="stAppViewContainer"] {
+    background: #f8fafc;
+    color: #0f172a;
+}
+[data-testid="stSidebar"] {
+    background-color: #e2e8f0;
+}
+h1, h2, h3 {
+    color: #1e293b;
+}
+[data-testid="stMetricValue"] {
+    color: #020617;
+    font-weight: bold;
+}
+input {
+    background-color: white !important;
+    color: black !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# Create sequences
-def create_sequences(data, seq_length=12):
-    X, y = [], []
-    for i in range(len(data) - seq_length):
-        X.append(data[i:i+seq_length])
-        y.append(data[i+seq_length])
-    return np.array(X), np.array(y)
+st.title("💻 AI Trading Terminal")
 
-X_lstm, y_lstm = create_sequences(scaled_data)
+# =========================
+# 🔴 LIVE STATUS
+# =========================
+st.markdown(f"""
+<div style="
+    background: #e0f2fe;
+    padding: 10px;
+    border-radius: 10px;
+    color: #0369a1;
+    font-weight: 600;
+">
+    🔴 LIVE MODE — Updating every {refresh_rate} sec
+</div>
+""", unsafe_allow_html=True)
 
-# Train-test split
-split = int(len(X_lstm) * 0.8)
-X_train, X_test = X_lstm[:split], X_lstm[split:]
-y_train, y_test = y_lstm[:split], y_lstm[split:]
+# =========================
+# SIDEBAR INPUTS
+# =========================
+st.sidebar.header("⚙️ Controls")
 
-# Build model
-lstm_model = Sequential()
-lstm_model.add(LSTM(50, return_sequences=True, input_shape=(X_lstm.shape[1], 1)))
-lstm_model.add(Dropout(0.2))
-lstm_model.add(LSTM(50))
-lstm_model.add(Dense(1))
+ticker = st.sidebar.text_input("Ticker", "AAPL", key="ticker")
+compare_tickers = st.sidebar.text_input("Compare", "MSFT,GOOG,TSLA", key="compare")
+start = st.sidebar.date_input("Start", pd.to_datetime("2020-01-01"), key="start")
+end = st.sidebar.date_input("End", pd.to_datetime("today"), key="end")
 
-lstm_model.compile(optimizer='adam', loss='mean_squared_error')
+# =========================
+# SAFE DOWNLOAD FUNCTION
+# =========================
+def load_data(symbol):
+    df = yf.download(symbol, start=start, end=end, auto_adjust=True)
 
-# Train
-lstm_model.fit(X_train, y_train, epochs=20, batch_size=16, verbose=0)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
 
-# RMSE
-y_pred_test = lstm_model.predict(X_test)
-rmse = np.sqrt(mean_squared_error(y_test, y_pred_test))
-st.write(f"📉 LSTM RMSE: {rmse:.4f}")
+    if df.empty:
+        return df
 
-# Future prediction
-last_sequence = scaled_data[-12:]
-future_preds = []
+    for col in ['Open','High','Low','Close','Volume']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
 
-current_seq = last_sequence.copy()
+    df.dropna(inplace=True)
+    return df
 
-for _ in range(6):
-    pred = lstm_model.predict(current_seq.reshape(1, 12, 1), verbose=0)
-    future_preds.append(pred[0][0])
-    current_seq = np.append(current_seq[1:], pred, axis=0)
+# =========================
+# LOAD DATA
+# =========================
+df = load_data(ticker)
 
-future_preds = scaler.inverse_transform(np.array(future_preds).reshape(-1, 1))
+if df.empty:
+    st.error("No data found")
+    st.stop()
 
-future_dates_lstm = pd.date_range(lstm_df["Date"].max(), periods=6, freq="ME")
+df.reset_index(inplace=True)
 
-future_lstm_df = pd.DataFrame({
-    "Date": future_dates_lstm,
-    "LSTM_Predicted": future_preds.flatten()
-})
+# =========================
+# INDICATORS
+# =========================
+def add_indicators(df):
+    df = df.copy()
 
-# Plot
-fig_lstm = go.Figure()
+    df['50_DMA'] = df['Close'].rolling(50).mean()
+    df['200_DMA'] = df['Close'].rolling(200).mean()
 
-fig_lstm.add_trace(go.Scatter(
-    x=lstm_df["Date"],
-    y=lstm_df["Close"],
-    mode='lines',
-    name='Actual'
+    delta = df['Close'].diff()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+
+    ema12 = df['Close'].ewm(span=12).mean()
+    ema26 = df['Close'].ewm(span=26).mean()
+    df['MACD'] = ema12 - ema26
+    df['Signal'] = df['MACD'].ewm(span=9).mean()
+
+    return df
+
+df = add_indicators(df)
+df.dropna(inplace=True)
+
+# =========================
+# KPI
+# =========================
+latest = df.iloc[-1]
+
+price = float(latest['Close'])
+rsi = float(latest['RSI'])
+
+trend = "🚀 Bullish" if latest['50_DMA'] > latest['200_DMA'] else "📉 Bearish"
+
+score = 0
+if rsi < 30: score += 1
+if latest['MACD'] > latest['Signal']: score += 1
+
+signal = "🔥 BUY" if score == 2 else "⚖️ HOLD" if score == 1 else "❌ SELL"
+confidence = int((score / 2) * 100)
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Price", f"${price:.2f}")
+col2.metric("RSI", f"{rsi:.2f}")
+col3.metric("Trend", trend)
+col4.metric("Signal", signal)
+
+# =========================
+# AI STATUS
+# =========================
+st.markdown(f"""
+<div style="
+    background: linear-gradient(90deg, #ecfdf5, #d1fae5);
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid #10b981;
+    font-weight: 600;
+    color: #065f46;
+">
+    🚀 AI Engine Active | Confidence: {confidence}%
+</div>
+""", unsafe_allow_html=True)
+
+# =========================
+# DARK LAYOUT FIX 🔥
+# =========================
+def dark_layout(fig, h=500):
+    fig.update_layout(
+        template="plotly_dark",
+        height=h,
+        plot_bgcolor="#020617",
+        paper_bgcolor="#020617",
+        xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)"),
+        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)"),
+        font=dict(color="#e2e8f0"),
+        margin=dict(l=20, r=20, t=40, b=20)
+    )
+    return fig
+
+# =========================
+# MAIN CHART
+# =========================
+fig = go.Figure()
+
+fig.add_trace(go.Candlestick(
+    x=df['Date'],
+    open=df['Open'],
+    high=df['High'],
+    low=df['Low'],
+    close=df['Close'],
+    increasing_line_color='#22c55e',
+    decreasing_line_color='#ef4444'
 ))
 
-fig_lstm.add_trace(go.Scatter(
-    x=future_lstm_df["Date"],
-    y=future_lstm_df["LSTM_Predicted"],
-    mode='lines+markers',
-    name='LSTM Predicted'
+buy = df[df['RSI'] < 30]
+sell = df[df['RSI'] > 70]
+
+fig.add_trace(go.Scatter(
+    x=buy['Date'], y=buy['Close'],
+    mode='markers',
+    marker=dict(color='#22c55e', size=10),
+    name="BUY"
 ))
 
-st.plotly_chart(fig_lstm, width='stretch')
+fig.add_trace(go.Scatter(
+    x=sell['Date'], y=sell['Close'],
+    mode='markers',
+    marker=dict(color='#ef4444', size=10),
+    name="SELL"
+))
+
+st.plotly_chart(dark_layout(fig, 600), use_container_width=True)
+
+# =========================
+# MULTI STOCK
+# =========================
+st.subheader("📊 Multi-Stock Comparison")
+
+fig2 = go.Figure()
+colors = ["#38bdf8", "#f97316", "#a78bfa", "#34d399"]
+
+for i, t in enumerate([x.strip().upper() for x in compare_tickers.split(",") if x.strip()]):
+    try:
+        temp = load_data(t)
+        if not temp.empty:
+            fig2.add_trace(go.Scatter(
+                x=temp.index,
+                y=temp['Close'],
+                name=t,
+                line=dict(color=colors[i % len(colors)], width=2)
+            ))
+    except:
+        st.warning(f"⚠️ Error loading {t}")
+
+st.plotly_chart(dark_layout(fig2, 400), use_container_width=True)
+
+# =========================
+# LSTM
+# =========================
+st.subheader("🧠 AI Forecast Engine")
+
+data = df['Close'].values.reshape(-1,1)
+
+if len(data) > 20:
+    scaler = MinMaxScaler()
+    scaled = scaler.fit_transform(data)
+
+    def seq(data, n=12):
+        X, y = [], []
+        for i in range(len(data)-n):
+            X.append(data[i:i+n])
+            y.append(data[i+n])
+        return np.array(X), np.array(y)
+
+    X, y = seq(scaled)
+
+    split = int(len(X)*0.8)
+    X_train, X_test = X[:split], X[split:]
+
+    model = Sequential()
+    model.add(LSTM(50, return_sequences=True, input_shape=(X.shape[1],1)))
+    model.add(Dropout(0.2))
+    model.add(LSTM(50))
+    model.add(Dense(1))
+
+    model.compile(optimizer='adam', loss='mse')
+    model.fit(X_train, y[:split], epochs=5, verbose=0)
+
+    preds = model.predict(X_test)
+
+    preds = scaler.inverse_transform(preds)
+    actual = scaler.inverse_transform(y[split:])
+
+    fig3 = go.Figure()
+
+    fig3.add_trace(go.Scatter(
+        y=actual.flatten(),
+        name="Actual",
+        line=dict(color="#38bdf8", width=3)
+    ))
+
+    fig3.add_trace(go.Scatter(
+        y=preds.flatten(),
+        name="Predicted",
+        line=dict(color="#f97316", width=3)
+    ))
+
+    st.plotly_chart(dark_layout(fig3, 400), use_container_width=True)
