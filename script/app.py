@@ -188,13 +188,19 @@ fig_rsi.add_hline(y=30)
 st.plotly_chart(fig_rsi, use_container_width=True)
 
 # =========================
-# 📅 MONTHLY DATA (NEW 🔥)
+# 📅 MONTHLY DATA (FIXED 🔥)
 # =========================
 st.subheader("📅 Monthly Data View")
 
 df_monthly = df.copy()
+
+# ✅ CRITICAL FIX
+df_monthly['Date'] = pd.to_datetime(df_monthly['Date'])
+
+# Set index
 df_monthly.set_index('Date', inplace=True)
 
+# ✅ RESAMPLE SAFE
 df_monthly = df_monthly.resample('M').agg({
     'Open': 'first',
     'High': 'max',
