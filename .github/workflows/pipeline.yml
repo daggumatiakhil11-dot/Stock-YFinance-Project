@@ -20,7 +20,8 @@ jobs:
 
     - name: Install dependencies
       run: |
-        pip install pandas yfinance openpyxl matplotlib
+        pip install pandas yfinance openpyxl matplotlib twilio
+        
 
     - name: Run data pipeline
       run: |
@@ -60,3 +61,24 @@ jobs:
       env:
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
         EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+    - name: Send WhatsApp Notification
+      run: |
+        python - <<EOF
+        from twilio.rest import Client
+        import os
+
+        client = Client(os.environ['TWILIO_SID'], os.environ['TWILIO_AUTH'])
+
+        message = client.messages.create(
+            body="🚀 Pipeline Success!\n📊 Data updated\n🌐 Dashboard ready",
+            from_=os.environ['TWILIO_FROM'],
+            to=os.environ['TWILIO_TO']
+        )
+
+        print("Message sent:", message.sid)
+        EOF
+      env:
+        TWILIO_SID: ${{ secrets.TWILIO_SID }}
+        TWILIO_AUTH: ${{ secrets.TWILIO_AUTH }}
+        TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
+        TWILIO_TO: ${{ secrets.TWILIO_TO }}
