@@ -127,7 +127,6 @@ st.plotly_chart(fig_pred, width='stretch')
 # 🧠 LSTM MODEL
 # ===============================
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from sklearn.metrics import mean_squared_error
 
