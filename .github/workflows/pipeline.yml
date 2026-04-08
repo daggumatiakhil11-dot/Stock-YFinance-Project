@@ -20,7 +20,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        pip install pandas yfinance openpyxl
+        pip install pandas yfinance openpyxl matplotlib
 
     - name: Run data pipeline
       run: |
