@@ -33,3 +33,30 @@ jobs:
         git add output/
         git commit -m "Auto update data (month-end)" || echo "No changes"
         git push
+
+    - name: Send Email Notification
+      run: |
+        python - <<EOF
+        import smtplib
+        from email.mime.text import MIMEText
+        import os
+
+        sender = os.environ['EMAIL_USER']
+        password = os.environ['EMAIL_PASS']
+        receiver = sender
+
+        msg = MIMEText("✅ Your AI pipeline ran successfully at month-end.\n\n📊 Data updated.\n🚀 Dashboard refreshed.")
+        msg['Subject'] = "🚀 AI Pipeline Success"
+        msg['From'] = sender
+        msg['To'] = receiver
+
+        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+        server.login(sender, password)
+        server.send_message(msg)
+        server.quit()
+
+        print("📧 Email sent successfully!")
+        EOF
+      env:
+        EMAIL_USER: ${{ secrets.EMAIL_USER }}
+        EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
