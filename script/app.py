@@ -194,14 +194,10 @@ st.subheader("📅 Monthly Data View")
 
 df_monthly = df.copy()
 
-# ✅ CRITICAL FIX
 df_monthly['Date'] = pd.to_datetime(df_monthly['Date'])
-
-# Set index
 df_monthly.set_index('Date', inplace=True)
 
-# ✅ RESAMPLE SAFE
-df_monthly = df_monthly.resample('M').agg({
+df_monthly = df_monthly.resample('MS').agg({
     'Open': 'first',
     'High': 'max',
     'Low': 'min',
