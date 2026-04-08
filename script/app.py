@@ -5,23 +5,15 @@ import yfinance as yf
 import plotly.graph_objects as go
 from sklearn.ensemble import RandomForestClassifier
 from streamlit_autorefresh import st_autorefresh
+from sklearn.linear_model import LogisticRegression, LinearRegression
 
 st.set_page_config(page_title="💻 AI Trading Terminal", layout="wide")
 
-# =========================
-# 🔄 AUTO REFRESH
-# =========================
 refresh_rate = st.sidebar.slider("🔄 Refresh Rate (sec)", 1, 60, 5)
 st_autorefresh(interval=refresh_rate * 1000, key="live_data")
 
-# =========================
-# 🎨 UI
-# =========================
 st.title("💻 AI Trading Terminal")
 
-# =========================
-# SIDEBAR INPUTS
-# =========================
 st.sidebar.header("⚙️ Controls")
 
 ticker = st.sidebar.text_input("Ticker", "AAPL")
@@ -29,9 +21,6 @@ compare_tickers = st.sidebar.text_input("Compare", "MSFT,GOOG,TSLA")
 start = st.sidebar.date_input("Start", pd.to_datetime("2020-01-01"))
 end = st.sidebar.date_input("End", pd.to_datetime("today"))
 
-# =========================
-# 📥 DATA LOADING
-# =========================
 @st.cache_data
 def load_data(symbol, start, end):
     try:
@@ -57,9 +46,6 @@ if df.empty:
     st.error("❌ No data found for this ticker")
     st.stop()
 
-# =========================
-# 📊 INDICATORS (UPDATED)
-# =========================
 def add_indicators(df):
     df = df.copy()
 
@@ -88,9 +74,6 @@ def add_indicators(df):
 df = add_indicators(df)
 df.dropna(inplace=True)
 
-# =========================
-# 🤖 AI MODEL
-# =========================
 @st.cache_resource
 def train_model(df):
     df = df.copy()
@@ -109,9 +92,6 @@ def train_model(df):
 
 model = train_model(df)
 
-# =========================
-# 📊 KPI + AI SIGNAL
-# =========================
 latest = df.iloc[-1]
 
 features = np.array([
@@ -154,9 +134,7 @@ col5.metric("200 DMA", f"{latest['200_DMA']:.2f}")
 col6.metric("AI Signal", signal)
 col7.metric("Confidence", f"{confidence}%")
 
-# =========================
-# 📈 MAIN CHART
-# =========================
+
 fig = go.Figure()
 
 fig.add_trace(go.Candlestick(
@@ -175,9 +153,7 @@ fig.add_trace(go.Scatter(x=df['Date'], y=df['200_DMA'], name="200 DMA"))
 
 st.plotly_chart(fig, use_container_width=True)
 
-# =========================
-# 📊 RSI CHART
-# =========================
+
 st.subheader("📊 RSI Indicator (14)")
 
 fig_rsi = go.Figure()
@@ -187,9 +163,7 @@ fig_rsi.add_hline(y=30)
 
 st.plotly_chart(fig_rsi, use_container_width=True)
 
-# =========================
-# 📅 MONTHLY DATA (FIXED 🔥)
-# =========================
+
 st.subheader("📅 Monthly Data View")
 
 df_monthly = df.copy()
@@ -207,13 +181,9 @@ df_monthly = df_monthly.resample('MS').agg({
 
 df_monthly.reset_index(inplace=True)
 
-# Monthly indicators
 df_monthly['MA3'] = df_monthly['Close'].rolling(3).mean()
 df_monthly['MA6'] = df_monthly['Close'].rolling(6).mean()
 
-# =========================
-# 📋 MONTHLY TABLE
-# =========================
 st.subheader("📋 Monthly Market Data")
 
 st.dataframe(
@@ -221,9 +191,6 @@ st.dataframe(
     use_container_width=True
 )
 
-# =========================
-# 📈 MONTHLY CHART
-# =========================
 st.subheader("📊 Monthly Trend")
 
 fig_m = go.Figure()
@@ -234,9 +201,6 @@ fig_m.add_trace(go.Scatter(x=df_monthly['Date'], y=df_monthly['MA6'], name="MA6"
 
 st.plotly_chart(fig_m, use_container_width=True)
 
-# =========================
-# 📋 FULL MONTHLY OHLC TABLE (NEW 🔥)
-# =========================
 st.subheader("📋 Monthly OHLC Data (Full View)")
 
 st.dataframe(
@@ -244,12 +208,135 @@ st.dataframe(
     use_container_width=True
 )
 
-# =========================
-# 📊 MONTHLY INDICATOR TABLE (NEW 🔥)
-# =========================
 st.subheader("📊 Monthly Indicators")
 
 st.dataframe(
     df_monthly[['Date', 'Close', 'MA3', 'MA6']].tail(24),
     use_container_width=True
 )
+
+# =========================
+# 💰 BACKTESTING ENGINE (NEW 🔥)
+# =========================
+st.subheader("💰 Strategy Backtesting")
+
+# Prepare dataset
+df_bt = df.copy()
+
+# Use same features
+features = ['Close', 'MA20', 'RSI', 'MACD']
+
+# Generate predictions
+df_bt['Prediction'] = model.predict(df_bt[features])
+
+# Strategy logic:
+# 1 = Buy (long)
+# 0 = Sell (exit / no position)
+df_bt['Position'] = df_bt['Prediction']
+
+# Calculate returns
+df_bt['Returns'] = df_bt['Close'].pct_change()
+
+# Strategy returns (shift to avoid lookahead bias)
+df_bt['Strategy_Returns'] = df_bt['Position'].shift(1) * df_bt['Returns']
+
+# Equity curve
+initial_capital = 1000
+df_bt['Equity'] = (1 + df_bt['Strategy_Returns']).cumprod() * initial_capital
+
+# =========================
+# 📊 METRICS
+# =========================
+total_return = (df_bt['Equity'].iloc[-1] / initial_capital - 1) * 100
+
+win_trades = df_bt[df_bt['Strategy_Returns'] > 0]
+total_trades = df_bt[df_bt['Strategy_Returns'] != 0]
+
+win_rate = (len(win_trades) / len(total_trades)) * 100 if len(total_trades) > 0 else 0
+
+# Max Drawdown
+rolling_max = df_bt['Equity'].cummax()
+drawdown = (df_bt['Equity'] - rolling_max) / rolling_max
+max_drawdown = drawdown.min() * 100
+
+# =========================
+# 📊 DISPLAY METRICS
+# =========================
+col1, col2, col3 = st.columns(3)
+
+col1.metric("Total Return %", f"{total_return:.2f}%")
+col2.metric("Win Rate %", f"{win_rate:.2f}%")
+col3.metric("Max Drawdown %", f"{max_drawdown:.2f}%")
+
+st.subheader("📈 Equity Curve")
+
+fig_bt = go.Figure()
+
+fig_bt.add_trace(go.Scatter(
+    x=df_bt['Date'],
+    y=df_bt['Equity'],
+    name="Strategy Equity",
+    line=dict(color='green', width=2)
+))
+
+st.plotly_chart(fig_bt, use_container_width=True)
+
+
+st.subheader("📊 Strategy vs Buy & Hold")
+
+df_bt['BuyHold'] = (1 + df_bt['Returns']).cumprod() * initial_capital
+
+fig_compare = go.Figure()
+
+fig_compare.add_trace(go.Scatter(
+    x=df_bt['Date'],
+    y=df_bt['Equity'],
+    name="AI Strategy",
+    line=dict(color='green')
+))
+
+fig_compare.add_trace(go.Scatter(
+    x=df_bt['Date'],
+    y=df_bt['BuyHold'],
+    name="Buy & Hold",
+    line=dict(color='blue')
+))
+
+st.plotly_chart(fig_compare, use_container_width=True)
+
+# =========================
+# 🔥 ADD LOGISTIC REGRESSION MODEL (NEW)
+# =========================
+@st.cache_resource
+def train_logistic_model(df):
+    df = df.copy()
+
+    df['Target'] = (df['Close'].shift(-1) > df['Close']).astype(int)
+    df.dropna(inplace=True)
+
+    features = ['Close', 'MA20', 'RSI', 'MACD']
+    X = df[features]
+    y = df['Target']
+
+    log_model = LogisticRegression()
+    log_model.fit(X, y)
+
+    return log_model
+
+# Train Logistic model
+log_model = train_logistic_model(df)
+
+# =========================
+# 🔮 LOGISTIC PREDICTION (FIXED ✅)
+# =========================
+
+log_features = np.array([
+    latest['Close'],
+    latest['MA20'],
+    latest['RSI'],
+    latest['MACD']
+]).reshape(1, -1)
+
+log_prediction = log_model.predict(log_features)[0]
+log_proba = log_model.predict_proba(log_features)[0]
+log_confidence = round(max(log_proba) * 100, 2)
