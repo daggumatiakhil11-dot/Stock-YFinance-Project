@@ -2,7 +2,7 @@ name: Auto Data Pipeline (Month-End)
 
 on:
   schedule:
-    - cron: '0 12 28-31 * *'   # Runs on 28–31 every month
+    - cron: '0 12 28-31 * *'
   workflow_dispatch:
 
 jobs:
@@ -21,7 +21,6 @@ jobs:
     - name: Install dependencies
       run: |
         pip install pandas yfinance openpyxl matplotlib twilio
-        
 
     - name: Run data pipeline
       run: |
@@ -33,9 +32,15 @@ jobs:
         git config user.email "actions@github.com"
         git add output/
         git commit -m "Auto update data (month-end)" || echo "No changes"
-        git push
+        git push origin main
 
+    # ===============================
+    # 📧 EMAIL ALERT
+    # ===============================
     - name: Send Email Notification
+      env:
+        EMAIL_USER: ${{ secrets.EMAIL_USER }}
+        EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
       run: |
         python - <<EOF
         import smtplib
@@ -44,12 +49,11 @@ jobs:
 
         sender = os.environ['EMAIL_USER']
         password = os.environ['EMAIL_PASS']
-        receiver = sender
 
-        msg = MIMEText("✅ Your AI pipeline ran successfully at month-end.\n\n📊 Data updated.\n🚀 Dashboard refreshed.")
+        msg = MIMEText("✅ Pipeline ran successfully.\n📊 Data updated\n🚀 Dashboard ready")
         msg['Subject'] = "🚀 AI Pipeline Success"
         msg['From'] = sender
-        msg['To'] = receiver
+        msg['To'] = sender
 
         server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
         server.login(sender, password)
@@ -58,16 +62,25 @@ jobs:
 
         print("📧 Email sent successfully!")
         EOF
-      env:
-        EMAIL_USER: ${{ secrets.EMAIL_USER }}
-        EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+
+    # ===============================
+    # 📲 WHATSAPP ALERT (TWILIO)
+    # ===============================
     - name: Send WhatsApp Notification
+      env:
+        TWILIO_SID: ${{ secrets.TWILIO_SID }}
+        TWILIO_AUTH: ${{ secrets.TWILIO_AUTH }}
+        TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
+        TWILIO_TO: ${{ secrets.TWILIO_TO }}
       run: |
         python - <<EOF
         from twilio.rest import Client
         import os
 
-        client = Client(os.environ['TWILIO_SID'], os.environ['TWILIO_AUTH'])
+        sid = os.environ['TWILIO_SID']
+        token = os.environ['TWILIO_AUTH']
+
+        client = Client(sid, token)
 
         message = client.messages.create(
             body="🚀 Pipeline Success!\n📊 Data updated\n🌐 Dashboard ready",
@@ -75,10 +88,5 @@ jobs:
             to=os.environ['TWILIO_TO']
         )
 
-        print("Message sent:", message.sid)
+        print("📲 WhatsApp message sent:", message.sid)
         EOF
-      env:
-        TWILIO_SID: ${{ secrets.TWILIO_SID }}
-        TWILIO_AUTH: ${{ secrets.TWILIO_AUTH }}
-        TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
-        TWILIO_TO: ${{ secrets.TWILIO_TO }}
