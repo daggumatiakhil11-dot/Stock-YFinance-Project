@@ -6,6 +6,17 @@ import matplotlib.pyplot as plt
 
 print("STEP 1: Starting monthly OHLCV data download...")
 
+from datetime import datetime, timedelta
+
+today = datetime.today()
+tomorrow = today + timedelta(days=1)
+
+if tomorrow.month != today.month:
+    print("✅ Running month-end pipeline...")
+else:
+    print("⏭ Not month-end, skipping execution.")
+    import sys
+sys.exit(0)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
